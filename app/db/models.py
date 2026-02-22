@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+﻿from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -13,6 +13,13 @@ class Client(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    stripe_metered_subscription_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    subscription_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    subscription_current_period_end: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    billing_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    usage_synced_until: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     api_keys: Mapped[list["ApiKey"]] = relationship("ApiKey", back_populates="client", cascade="all, delete-orphan")
@@ -65,3 +72,15 @@ class UsageEvent(Base):
     client: Mapped["Client"] = relationship("Client", back_populates="usage_events")
     api_key: Mapped["ApiKey"] = relationship("ApiKey", back_populates="usage_events")
     service: Mapped["Service"] = relationship("Service", back_populates="usage_events")
+
+
+class StripeEventLog(Base):
+    __tablename__ = "stripe_event_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

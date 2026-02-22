@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -22,6 +22,7 @@ class ClientUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     email: str | None = Field(default=None, min_length=3, max_length=255)
     is_active: bool | None = None
+    billing_enabled: bool | None = None
 
 
 class ClientOut(BaseModel):
@@ -31,6 +32,13 @@ class ClientOut(BaseModel):
     name: str
     email: str
     is_active: bool
+    stripe_customer_id: str | None
+    stripe_subscription_id: str | None
+    stripe_metered_subscription_item_id: str | None
+    subscription_status: str | None
+    subscription_current_period_end: datetime | None
+    billing_enabled: bool
+    usage_synced_until: datetime | None
     created_at: datetime
 
 
@@ -116,6 +124,8 @@ def update_client(client_id: int, payload: ClientUpdate, db: Session = Depends(g
         client.name = payload.name
     if payload.is_active is not None:
         client.is_active = payload.is_active
+    if payload.billing_enabled is not None:
+        client.billing_enabled = payload.billing_enabled
 
     db.commit()
     db.refresh(client)
