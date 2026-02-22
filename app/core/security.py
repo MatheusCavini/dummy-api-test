@@ -1,6 +1,7 @@
-import hashlib
+﻿import hashlib
 import os
 import secrets
+from datetime import datetime, timezone
 
 from fastapi import Header, HTTPException
 from sqlalchemy.orm import Session, joinedload
@@ -10,6 +11,9 @@ from app.db.models import ApiKey, Service
 
 
 logger = get_logger(__name__)
+
+
+BILLABLE_ACTIVE_STATUSES = {"active", "trialing"}
 
 
 def _extract_bearer_token(auth_header: str | None) -> str | None:
@@ -50,6 +54,19 @@ def require_admin(authorization: str | None = Header(None)) -> None:
     authenticate_admin(authorization)
 
 
+def _is_client_subscription_active(client) -> bool:
+    if not client.billing_enabled:
+        return False
+
+    if client.subscription_status not in BILLABLE_ACTIVE_STATUSES:
+        return False
+
+    if client.subscription_current_period_end and client.subscription_current_period_end <= datetime.now(timezone.utc):
+        return False
+
+    return True
+
+
 def authenticate_api_key(
     db: Session, auth_header: str | None, service_code: str
 ) -> tuple[ApiKey | None, Service | None, str | None]:
@@ -76,6 +93,8 @@ def authenticate_api_key(
         return None, None, "invalid_api_key"
     if not api_key.client.is_active:
         return None, None, "inactive_client"
+    if not _is_client_subscription_active(api_key.client):
+        return None, None, "subscription_inactive"
     if api_key.service_id and api_key.service_id != service.id:
         return None, None, "api_key_not_allowed_for_service"
     if api_key.service and not api_key.service.is_active:

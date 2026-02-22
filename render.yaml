@@ -1,9 +1,10 @@
-services:
+﻿services:
   - type: web
     name: dummy-api-sandbox
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port 10000"
+    postDeployCommand: "alembic upgrade head"
     plan: free
     envVars:
       - key: DATABASE_URL
@@ -11,6 +12,20 @@ services:
           name: dummy-api-db
           property: connectionString
       - key: ADMIN_API_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: sandbox
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_BASE_MONTHLY_ID
+        sync: false
+      - key: STRIPE_PRICE_METERED_ID
+        sync: false
+      - key: STRIPE_SUCCESS_URL
+        sync: false
+      - key: STRIPE_CANCEL_URL
         sync: false
 
 databases:
