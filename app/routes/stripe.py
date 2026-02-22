@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
@@ -7,9 +7,17 @@ from sqlalchemy.orm import Session
 import stripe
 
 from app.config import settings
-from app.core.security import require_admin
+from app.core.logger import get_logger
+from app.core.security import generate_api_key, require_admin
 from app.db.database import get_db
-from app.db.models import Client, StripeEventLog, UsageEvent
+from app.db.models import (
+    ApiKey,
+    Client,
+    PendingApiKeyDelivery,
+    Service,
+    StripeEventLog,
+    UsageEvent,
+)
 from app.integrations.stripe_client import (
     create_checkout_session,
     create_portal_session,
@@ -18,6 +26,9 @@ from app.integrations.stripe_client import (
     record_meter_event,
     unix_to_datetime,
 )
+
+
+logger = get_logger(__name__)
 
 
 admin_router = APIRouter(
@@ -77,6 +88,60 @@ def _update_client_subscription_state(client: Client, subscription: dict) -> Non
     client.stripe_metered_subscription_item_id = extract_metered_subscription_item_id(subscription)
 
 
+def _ensure_default_service_api_key(db: Session, client: Client) -> None:
+    service_code = settings.client_default_service_code
+    if not service_code:
+        return
+
+    service = (
+        db.query(Service)
+        .filter(Service.code == service_code, Service.is_active.is_(True))
+        .first()
+    )
+    if not service:
+        logger.warning("Default service '%s' is missing or inactive", service_code)
+        return
+
+    now = datetime.now(timezone.utc)
+    pending = (
+        db.query(PendingApiKeyDelivery)
+        .join(ApiKey)
+        .filter(
+            ApiKey.client_id == client.id,
+            ApiKey.service_id == service.id,
+            PendingApiKeyDelivery.delivered_at.is_(None),
+            PendingApiKeyDelivery.expires_at > now,
+        )
+        .first()
+    )
+    if pending:
+        return
+
+    existing = (
+        db.query(ApiKey)
+        .filter(ApiKey.client_id == client.id, ApiKey.service_id == service.id)
+        .first()
+    )
+    if existing:
+        return
+
+    raw_key, prefix, key_hash = generate_api_key()
+    api_key = ApiKey(
+        client_id=client.id,
+        service_id=service.id,
+        key_hash=key_hash,
+        prefix=prefix,
+    )
+    db.add(api_key)
+    db.flush()
+    pending_delivery = PendingApiKeyDelivery(
+        api_key_id=api_key.id,
+        raw_key=raw_key,
+        expires_at=now + timedelta(seconds=settings.client_pending_api_key_ttl_seconds),
+    )
+    db.add(pending_delivery)
+
+
 def _handle_checkout_completed(db: Session, event: dict) -> bool:
     payload = event.get("data", {}).get("object", {})
     client_id_raw = payload.get("client_reference_id") or payload.get("metadata", {}).get("client_id")
@@ -90,6 +155,8 @@ def _handle_checkout_completed(db: Session, event: dict) -> bool:
     client.stripe_customer_id = payload.get("customer")
     if payload.get("subscription"):
         client.stripe_subscription_id = payload.get("subscription")
+    db.flush()
+    _ensure_default_service_api_key(db, client)
     return True
 
 
@@ -111,6 +178,8 @@ def _handle_subscription_event(db: Session, event: dict) -> bool:
     _update_client_subscription_state(client, subscription)
     if event.get("type") == "customer.subscription.deleted":
         client.subscription_status = "canceled"
+    db.flush()
+    _ensure_default_service_api_key(db, client)
     return True
 
 
@@ -219,7 +288,6 @@ def sync_usage(payload: UsageSyncRequest, db: Session = Depends(get_db)):
             )
             .scalar()
         )
-
         units = int(total_units or 0)
         if units > 0 and not payload.dry_run:
             record_meter_event(

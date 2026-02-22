@@ -20,10 +20,13 @@ class Client(Base):
     subscription_current_period_end: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     billing_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     usage_synced_until: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    password_salt: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     api_keys: Mapped[list["ApiKey"]] = relationship("ApiKey", back_populates="client", cascade="all, delete-orphan")
     usage_events: Mapped[list["UsageEvent"]] = relationship("UsageEvent", back_populates="client")
+    sessions: Mapped[list["ClientSession"]] = relationship("ClientSession", back_populates="client", cascade="all, delete-orphan")
 
 
 class Service(Base):
@@ -55,6 +58,9 @@ class ApiKey(Base):
     client: Mapped["Client"] = relationship("Client", back_populates="api_keys")
     service: Mapped["Service | None"] = relationship("Service", back_populates="api_keys")
     usage_events: Mapped[list["UsageEvent"]] = relationship("UsageEvent", back_populates="api_key")
+    pending_deliveries: Mapped[list["PendingApiKeyDelivery"]] = relationship(
+        "PendingApiKeyDelivery", back_populates="api_key", cascade="all, delete-orphan"
+    )
 
 
 class UsageEvent(Base):
@@ -84,3 +90,29 @@ class StripeEventLog(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ClientSession(Base):
+    __tablename__ = "client_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
+    jti: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    expires_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    client: Mapped["Client"] = relationship("Client", back_populates="sessions")
+
+
+class PendingApiKeyDelivery(Base):
+    __tablename__ = "pending_api_key_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    api_key_id: Mapped[int] = mapped_column(ForeignKey("api_keys.id"), nullable=False, index=True)
+    raw_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    expires_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delivered_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    api_key: Mapped["ApiKey"] = relationship("ApiKey", back_populates="pending_deliveries")
