@@ -1,9 +1,16 @@
 from fastapi import FastAPI
-from app.routes import health, transform
 from app.core.logger import configure_logging
+from app.db.database import init_db
+from app.routes import admin, billing, health, transform
 
 app = FastAPI(title="Dummy API SaaS")
 configure_logging()
 
+@app.on_event("startup")
+def on_startup() -> None:
+    init_db()
+
+app.include_router(admin.router)
+app.include_router(billing.router)
 app.include_router(health.router)
 app.include_router(transform.router)
