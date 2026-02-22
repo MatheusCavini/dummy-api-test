@@ -36,7 +36,9 @@ def get_or_create_customer(client: Client) -> str:
     return created_customer["id"]
 
 
-def create_checkout_session(client: Client, customer_id: str) -> stripe.checkout.Session:
+def create_checkout_session(
+    client: Client, customer_id: str, line_items: list[dict] | None = None
+) -> stripe.checkout.Session:
     _configure_stripe()
 
     if not settings.stripe_price_base_monthly_id or not settings.stripe_price_metered_id:
@@ -44,16 +46,18 @@ def create_checkout_session(client: Client, customer_id: str) -> stripe.checkout
     if not settings.stripe_success_url or not settings.stripe_cancel_url:
         raise RuntimeError("Stripe success/cancel URLs are not configured")
 
+    items = line_items or [
+        {"price": settings.stripe_price_base_monthly_id, "quantity": 1},
+        {"price": settings.stripe_price_metered_id},
+    ]
+
     return stripe.checkout.Session.create(
         mode="subscription",
         customer=customer_id,
         client_reference_id=str(client.id),
         success_url=settings.stripe_success_url,
         cancel_url=settings.stripe_cancel_url,
-        line_items=[
-            {"price": settings.stripe_price_base_monthly_id, "quantity": 1},
-            {"price": settings.stripe_price_metered_id},
-        ],
+        line_items=items,
         subscription_data={
             "metadata": {
                 "client_id": str(client.id),
