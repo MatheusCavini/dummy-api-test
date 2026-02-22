@@ -26,7 +26,7 @@ class Settings:
         self.client_pending_api_key_ttl_seconds = self._get_int_env(
             "CLIENT_PENDING_API_KEY_TTL_SECONDS", 600
         )
-        self.client_default_service_code = os.getenv("CLIENT_DEFAULT_SERVICE_CODE")
+        self.client_default_service_code = os.getenv("CLIENT_DEFAULT_SERVICE_CODE", "transform")
         self.cors_allow_origins = self._get_list_env("CORS_ALLOW_ORIGINS", ["*"])
         self.cors_allow_origin_regex = os.getenv(
             "CORS_ALLOW_ORIGIN_REGEX",
