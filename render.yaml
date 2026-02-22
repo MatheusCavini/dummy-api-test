@@ -3,8 +3,7 @@
     name: dummy-api-sandbox
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port 10000"
-    postDeployCommand: "alembic upgrade head"
+    startCommand: bash -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 10000"
     plan: free
     envVars:
       - key: DATABASE_URL
@@ -32,4 +31,4 @@ databases:
   - name: dummy-api-db
     plan: free
     databaseName: dummy_api
-    user: dummy_api_user
+    user: dbeaver
