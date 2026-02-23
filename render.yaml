@@ -26,6 +26,14 @@
         sync: false
       - key: STRIPE_CANCEL_URL
         sync: false
+      - key: CLIENT_JWT_SECRET
+        sync: false
+      - key: CLIENT_DEFAULT_SERVICE_CODE
+        value: transform
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+      - key: CORS_ALLOW_ORIGIN_REGEX
+        value: "^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$"
 
 databases:
   - name: dummy-api-db
